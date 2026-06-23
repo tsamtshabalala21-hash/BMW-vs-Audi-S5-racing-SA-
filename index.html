@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>GTA Style SA Racing</title>
+
+<style>
+body {
+  margin:0;
+  overflow:hidden;
+  font-family:Arial;
+  background:black;
+}
+
+#ui {
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:10;
+  color:white;
+  background:rgba(0,0,0,0.5);
+  padding:10px;
+  border-radius:10px;
+}
+
+button { padding:10px; margin-top:5px; }
+
+#stars { color:gold; font-size:18px; }
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+<h2>GTA SA RACING MODE</h2>
+<p id="speed">Speed: 0</p>
+<p id="wanted">Wanted: 0 ★</p>
+<p id="status">Ready</p>
+<button onclick="startGame()">START</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+
+// ================= WORLD =================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 3000);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// LIGHT
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(10,20,10);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x555555));
+
+// ================= ROADS =================
+function road(x,z){
+const r = new THREE.Mesh(
+new THREE.PlaneGeometry(20,20),
+new THREE.MeshStandardMaterial({color:0x2a2a2a})
+);
+r.rotation.x = -Math.PI/2;
+r.position.set(x,0,z);
+scene.add(r);
+}
+
+for(let x=-10;x<=10;x++){
+for(let z=-30;z<=30;z++){
+road(x*20,z*20);
+}
+}
+
+// ================= CITY BUILDINGS =================
+function building(x,z){
+let h = Math.random()*25 + 5;
+
+let b = new THREE.Mesh(
+new THREE.BoxGeometry(8,h,8),
+new THREE.MeshStandardMaterial({color:0x666666})
+);
+
+b.position.set(x,h/2,z);
+scene.add(b);
+}
+
+for(let i=0;i<300;i++){
+building((Math.random()-0.5)*800, (Math.random()-0.5)*800);
+}
+
+// ================= PLAYER CAR =================
+const car = new THREE.Mesh(
+new THREE.BoxGeometry(2,0.8,4),
+new THREE.MeshStandardMaterial({color:0x0066ff})
+);
+car.position.y = 0.4;
+scene.add(car);
+
+// ================= POLICE =================
+let police = [];
+
+function spawnPolice(){
+let p = new THREE.Mesh(
+new THREE.BoxGeometry(2,0.8,4),
+new THREE.MeshStandardMaterial({color:0x000000})
+);
+
+p.position.set(
+car.position.x + (Math.random()*20-10),
+0.4,
+car.position.z - 100
+);
+
+scene.add(p);
+police.push(p);
+}
+
+// ================= TRAFFIC =================
+let traffic = [];
+
+function spawnTraffic(){
+let t = new THREE.Mesh(
+new THREE.BoxGeometry(2,0.8,4),
+new THREE.MeshStandardMaterial({color:0xff0000})
+);
+
+t.position.set(
+Math.random()*200-100,
+0.4,
+car.position.z - 150
+);
+
+scene.add(t);
+traffic.push(t);
+}
+
+// ================= GAME STATE =================
+let speed = 0;
+let steer = 0;
+let wanted = 0;
+let running = false;
+
+// ================= CONTROLS =================
+document.addEventListener("keydown",(e)=>{
+
+if(e.key=="w") speed = 1;
+if(e.key=="s") speed = -0.5;
+if(e.key=="a") steer = -0.6;
+if(e.key=="d") steer = 0.6;
+
+if(e.key==" "){
+speed = 2;
+wanted = Math.min(5, wanted + 1);
+document.getElementById("status").innerHTML="NITRO + HEAT!";
+}
+
+});
+
+// ================= START =================
+function startGame(){
+running = true;
+loop();
+}
+
+// ================= LOOP =================
+function loop(){
+
+if(!running) return;
+
+requestAnimationFrame(loop);
+
+// move player
+car.position.z -= speed;
+car.position.x += steer;
+
+// spawn systems
+if(Math.random()<0.02) spawnTraffic();
+if(wanted > 0 && Math.random()<0.01) spawnPolice();
+
+// traffic AI
+traffic.forEach((t,i)=>{
+t.position.z += 1;
+
+if(Math.abs(car.position.x - t.position.x)<2 &&
+Math.abs(car.position.z - t.position.z)<4){
+document.getElementById("status").innerHTML="CRASH!";
+running=false;
+}
+
+if(t.position.z > car.position.z + 200){
+scene.remove(t);
+traffic.splice(i,1);
+}
+});
+
+// police AI (chase player)
+police.forEach((p,i)=>{
+p.position.x += (car.position.x - p.position.x)*0.03;
+p.position.z += 1.5;
+
+if(Math.abs(car.position.x - p.position.x)<2 &&
+Math.abs(car.position.z - p.position.z)<4){
+document.getElementById("status").innerHTML="CAUGHT BY POLICE!";
+running=false;
+}
+});
+
+// wanted decay
+if(wanted>0 && Math.random()<0.01) wanted--;
+
+// UI
+document.getElementById("speed").innerHTML =
+"Speed: " + Math.round(speed*200);
+
+document.getElementById("wanted").innerHTML =
+"Wanted: " + "★".repeat(wanted);
+
+// camera GTA style follow
+camera.position.x += (car.position.x - camera.position.x)*0.08;
+camera.position.z = car.position.z + 10;
+camera.position.y = 6;
+camera.lookAt(car.position);
+
+// render
+renderer.render(scene,camera);
+
+}
+
+// resize
+window.addEventListener("resize",()=>{
+camera.aspect = innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
+});
+
+</script>
+
+</body>
+  </html>
